@@ -1,0 +1,1 @@
+{"generatedAt":"2026-08-03T20:35:49.922Z","snapshotCount":1,"hasSales":false,"note":"Se necesitan al menos 2 capturas para inferir ventas. Corre \"npm run scrape\" periódicamente.","events":[],"byDay":[],"byProduct":[],"totals":{"units":0,"revenue":0,"restockUnits":0}}
