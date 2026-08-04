@@ -134,16 +134,16 @@ export async function runInference() {
   }
   const byMonth = [...byMonthMap.values()].sort((x, y) => x.month.localeCompare(y.month));
 
-  // Agregados por categoría (una venta puede sumar a varias categorías)
+  // Agregados por categoría. Cada venta se cuenta una sola vez, en su categoría
+  // principal (la primera), para que la suma cuadre con el total.
   const byCatMap = new Map();
   for (const e of events) {
     if (e.type !== 'venta') continue;
-    for (const c of e.categories || []) {
-      const row = byCatMap.get(c) || { name: c, units: 0, revenue: 0 };
-      row.units += e.units;
-      row.revenue += e.revenue;
-      byCatMap.set(c, row);
-    }
+    const c = e.categories?.[0] || 'Sin categoría';
+    const row = byCatMap.get(c) || { name: c, units: 0, revenue: 0 };
+    row.units += e.units;
+    row.revenue += e.revenue;
+    byCatMap.set(c, row);
   }
   const byCategory = [...byCatMap.values()].sort((x, y) => y.units - x.units);
 

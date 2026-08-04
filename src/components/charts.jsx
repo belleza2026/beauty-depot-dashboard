@@ -93,6 +93,36 @@ export function SalesTrend({ data, metric = 'units', xKey = 'day', height = 260,
   );
 }
 
+// Barras verticales de ventas por periodo (semana/mes) — más claras que un área
+// cuando hay pocos periodos.
+export function SalesBars({ data, metric = 'units', xKey = 'label', height = 300 }) {
+  const grid = isDark() ? PALETTE.gridDark : PALETTE.grid;
+  const fmt = metric === 'revenue' ? Q : num;
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={grid} vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fill: PALETTE.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: grid }} />
+        <YAxis
+          tick={{ fill: PALETTE.axis, fontSize: 11 }}
+          tickLine={false}
+          axisLine={false}
+          width={48}
+          tickFormatter={(v) => (metric === 'revenue' ? Qcompact(v) : num(v))}
+        />
+        <Tooltip cursor={{ fill: 'rgba(148,163,184,0.12)' }} content={<ChartTooltip valueFmt={fmt} />} />
+        <Bar
+          dataKey={metric}
+          name={metric === 'revenue' ? 'Ingreso est.' : 'Unidades'}
+          fill={PALETTE.blue}
+          radius={[4, 4, 0, 0]}
+          maxBarSize={64}
+        />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // Barras horizontales de magnitud (una medida) — un solo tono azul.
 export function MagnitudeBars({ data, dataKey = 'value', nameKey = 'name', valueFmt = num, height = 300, highlightMax = true }) {
   const grid = isDark() ? PALETTE.gridDark : PALETTE.grid;

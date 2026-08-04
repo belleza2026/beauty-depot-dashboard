@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSales } from '../lib/useData';
 import { KpiCard, Loading, EmptyState, Banner } from '../components/ui';
-import { SalesTrend, MagnitudeBars } from '../components/charts';
+import { SalesTrend, SalesBars, MagnitudeBars } from '../components/charts';
 import {
   ventaEvents, seriesByDay, seriesByWeek, seriesByMonth, aggByCategory, aggByProduct,
   ventaEventsOnDay, daysWithSales,
@@ -149,13 +149,11 @@ export default function Ventas() {
               <p className="text-xs text-slate-400 mb-3">Haz clic en un día de la gráfica para ver su detalle abajo ↓</p>
             )}
             {serie.length ? (
-              <SalesTrend
-                data={serie}
-                metric={metric}
-                xKey="label"
-                height={300}
-                onPointClick={gran === 'day' ? setSelectedDay : undefined}
-              />
+              gran === 'day' ? (
+                <SalesTrend data={serie} metric={metric} xKey="label" height={300} onPointClick={setSelectedDay} />
+              ) : (
+                <SalesBars data={serie} metric={metric} xKey="label" height={300} />
+              )
             ) : (
               <div className="h-[300px] grid place-items-center text-sm text-slate-400">Sin ventas en este periodo.</div>
             )}
@@ -176,7 +174,8 @@ export default function Ventas() {
       {view === 'categoria' && (
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="card p-5">
-            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Ventas por categoría</h2>
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-1">Ventas por categoría</h2>
+            <p className="text-xs text-slate-400 mb-3">Cada venta cuenta una vez, en su categoría principal (suma = {num(units)} uds)</p>
             {cats.length ? (
               <MagnitudeBars data={cats.slice(0, 12)} dataKey={metric} valueFmt={metricFmtC} height={Math.max(240, cats.slice(0, 12).length * 30)} />
             ) : (

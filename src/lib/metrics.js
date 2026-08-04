@@ -136,16 +136,16 @@ export function seriesByMonth(events) {
   return [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
-// Agrega eventos por categoría (una venta suma a cada categoría del producto).
+// Agrega eventos por categoría. Cada venta se cuenta UNA sola vez, en su categoría
+// principal (la primera del producto), para que la suma cuadre con el total.
 export function aggByCategory(events) {
   const m = new Map();
   for (const e of events) {
-    for (const c of e.categories || []) {
-      const r = m.get(c) || { name: c, units: 0, revenue: 0 };
-      r.units += e.units;
-      r.revenue += e.revenue;
-      m.set(c, r);
-    }
+    const c = e.categories?.[0] || 'Sin categoría';
+    const r = m.get(c) || { name: c, units: 0, revenue: 0 };
+    r.units += e.units;
+    r.revenue += e.revenue;
+    m.set(c, r);
   }
   return [...m.values()];
 }
