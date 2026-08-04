@@ -122,6 +122,31 @@ export async function runInference() {
   }
   const byProduct = [...byProdMap.values()].sort((x, y) => y.units - x.units);
 
+  // Agregados por mes (YYYY-MM)
+  const byMonthMap = new Map();
+  for (const r of byDay) {
+    const month = r.day.slice(0, 7);
+    const row = byMonthMap.get(month) || { month, units: 0, revenue: 0, orders: 0 };
+    row.units += r.units;
+    row.revenue += r.revenue;
+    row.orders += r.orders;
+    byMonthMap.set(month, row);
+  }
+  const byMonth = [...byMonthMap.values()].sort((x, y) => x.month.localeCompare(y.month));
+
+  // Agregados por categoría (una venta puede sumar a varias categorías)
+  const byCatMap = new Map();
+  for (const e of events) {
+    if (e.type !== 'venta') continue;
+    for (const c of e.categories || []) {
+      const row = byCatMap.get(c) || { name: c, units: 0, revenue: 0 };
+      row.units += e.units;
+      row.revenue += e.revenue;
+      byCatMap.set(c, row);
+    }
+  }
+  const byCategory = [...byCatMap.values()].sort((x, y) => y.units - x.units);
+
   const totals = { units: 0, revenue: 0, restockUnits: 0 };
   for (const e of events) {
     if (e.type === 'venta') { totals.units += e.units; totals.revenue += e.revenue; }
@@ -135,8 +160,10 @@ export async function runInference() {
     lastCapture: snaps[snaps.length - 1].capturedAt,
     hasSales: byDay.length > 0,
     isDemo: snaps.some((s) => s.file.includes('demo')),
-    events: events.slice(-5000),
+    events: events.slice(-10000),
     byDay,
+    byMonth,
+    byCategory,
     byProduct,
     totals,
   };

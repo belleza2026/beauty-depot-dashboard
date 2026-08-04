@@ -45,11 +45,11 @@ function ChartTooltip({ active, payload, label, valueFmt }) {
   );
 }
 
-export function SalesTrend({ data, metric = 'units' }) {
+export function SalesTrend({ data, metric = 'units', xKey = 'day', height = 260 }) {
   const grid = isDark() ? PALETTE.gridDark : PALETTE.grid;
   const fmt = metric === 'revenue' ? Q : num;
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
@@ -58,7 +58,7 @@ export function SalesTrend({ data, metric = 'units' }) {
           </linearGradient>
         </defs>
         <CartesianGrid stroke={grid} vertical={false} />
-        <XAxis dataKey="day" tick={{ fill: PALETTE.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: grid }} />
+        <XAxis dataKey={xKey} tick={{ fill: PALETTE.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: grid }} />
         <YAxis
           tick={{ fill: PALETTE.axis, fontSize: 11 }}
           tickLine={false}

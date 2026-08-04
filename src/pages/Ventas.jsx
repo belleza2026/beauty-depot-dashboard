@@ -1,18 +1,66 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useProducts, useSales } from '../lib/useData';
+import { useSales } from '../lib/useData';
 import { KpiCard, Loading, EmptyState, Banner } from '../components/ui';
 import { SalesTrend, MagnitudeBars } from '../components/charts';
-import { valueByCategory, lastNDays } from '../lib/metrics';
+import {
+  ventaEvents, seriesByDay, seriesByWeek, seriesByMonth, aggByCategory, aggByProduct,
+} from '../lib/metrics';
 import { Q, Qcompact, num, fecha } from '../lib/format';
 
-export default function Ventas() {
-  const { data: prod } = useProducts();
-  const { data: sales, loading, error } = useSales();
-  const [metric, setMetric] = useState('units');
-  const [range, setRange] = useState(30);
+const PERIODS = [
+  { label: '7 días', days: 7 },
+  { label: '30 días', days: 30 },
+  { label: '90 días', days: 90 },
+  { label: 'Todo', days: null },
+];
+const GRANS = [
+  { key: 'day', label: 'Día', fn: seriesByDay },
+  { key: 'week', label: 'Semana', fn: seriesByWeek },
+  { key: 'month', label: 'Mes', fn: seriesByMonth },
+];
+const VIEWS = [
+  { key: 'tiempo', label: 'En el tiempo' },
+  { key: 'categoria', label: 'Por categoría' },
+  { key: 'producto', label: 'Por producto' },
+];
 
-  const invValue = useMemo(() => (prod ? valueByCategory(prod.products, 10) : []), [prod]);
+// Botones tipo segmento reutilizables.
+function Segmented({ options, value, onChange, getKey = (o) => o.key, getLabel = (o) => o.label }) {
+  return (
+    <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+      {options.map((o) => {
+        const k = getKey(o);
+        return (
+          <button
+            key={k}
+            onClick={() => onChange(k)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              value === k ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {getLabel(o)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Ventas() {
+  const { data: sales, loading, error } = useSales();
+  const [days, setDays] = useState(30);
+  const [view, setView] = useState('tiempo');
+  const [gran, setGran] = useState('day');
+  const [metric, setMetric] = useState('units');
+
+  const events = useMemo(() => (sales ? ventaEvents(sales.events, days) : []), [sales, days]);
+  const serie = useMemo(() => {
+    const fn = GRANS.find((g) => g.key === gran).fn;
+    return fn(events);
+  }, [events, gran]);
+  const cats = useMemo(() => aggByCategory(events).sort((a, b) => b[metric] - a[metric]), [events, metric]);
+  const prods = useMemo(() => aggByProduct(events).sort((a, b) => b[metric] - a[metric]), [events, metric]);
 
   if (loading) return <Loading label="Cargando ventas…" />;
   if (error || !sales) return <EmptyState title="Sin datos de ventas">Corre el scraper para empezar.</EmptyState>;
@@ -20,34 +68,23 @@ export default function Ventas() {
   if (!sales.hasSales) {
     return (
       <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Ventas estimadas</h1>
-          <p className="text-sm text-slate-400">Inferidas por cambios de inventario</p>
-        </div>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Ventas estimadas</h1>
         <Banner tone="info">
-          {sales.note || 'Se necesitan al menos 2 capturas para inferir ventas.'} Mientras tanto puedes
-          generar una demostración con <code>npm run seed-demo</code>.
+          {sales.note || 'Se necesitan al menos 2 capturas para inferir ventas.'} En cuanto se
+          acumulen capturas, aquí verás las ventas por día, semana, mes, categoría y producto.
         </Banner>
-        {invValue.length > 0 && (
-          <div className="card p-5">
-            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-1">Valor de inventario por categoría</h2>
-            <p className="text-xs text-slate-400 mb-3">Métrica derivada del catálogo (stock × precio)</p>
-            <MagnitudeBars data={invValue} valueFmt={Qcompact} height={340} />
-          </div>
-        )}
       </div>
     );
   }
 
-  const byDay = lastNDays(sales.byDay, range);
-  const units = byDay.reduce((s, d) => s + d.units, 0);
-  const revenue = byDay.reduce((s, d) => s + d.revenue, 0);
-  const topUnits = sales.byProduct.slice(0, 10).map((p) => ({ name: p.name, value: p.units, id: p.id }));
-  const topRev = [...sales.byProduct].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
-    .map((p) => ({ name: p.name, value: Math.round(p.revenue), id: p.id }));
+  const units = events.reduce((s, e) => s + e.units, 0);
+  const revenue = events.reduce((s, e) => s + e.revenue, 0);
+  const metricFmt = metric === 'revenue' ? Q : num;
+  const metricFmtC = metric === 'revenue' ? Qcompact : num;
 
   return (
     <div className="space-y-6">
+      {/* Encabezado + periodo */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Ventas estimadas</h1>
@@ -55,82 +92,131 @@ export default function Ventas() {
             Inferidas por cambios de inventario · {fecha(sales.firstCapture)} → {fecha(sales.lastCapture)}
           </p>
         </div>
-        <div className="flex gap-2">
-          {[7, 30, 90].map((n) => (
-            <button key={n} onClick={() => setRange(n)}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${range === n ? 'bg-brand-500 text-white border-brand-500' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>
-              {n} días
-            </button>
-          ))}
-        </div>
+        <Segmented options={PERIODS} value={days} onChange={setDays} getKey={(o) => o.days} />
       </div>
 
       {sales.isDemo && (
         <Banner tone="warn">
-          <b>Modo demostración:</b> datos de ejemplo (<code>npm run seed-demo</code>). Se reemplazan por ventas reales al correr <code>npm run scrape</code> a diario.
+          <b>Modo demostración:</b> datos de ejemplo. Se reemplazan por ventas reales al correr el scraper.
         </Banner>
       )}
 
+      {/* KPIs del periodo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label={`Unidades (${range} d)`} value={num(units)} sub="estimado" accent="violet" />
-        <KpiCard label={`Ingreso (${range} d)`} value={Q(revenue)} sub="estimado" accent="emerald" />
-        <KpiCard label="Productos con ventas" value={num(sales.byProduct.length)} accent="sky" />
-        <KpiCard label="Restock (total)" value={num(sales.totals.restockUnits)} sub="unidades repuestas" accent="amber" />
+        <KpiCard label="Unidades" value={num(units)} sub={PERIODS.find((p) => p.days === days).label} accent="violet" />
+        <KpiCard label="Ingreso estimado" value={Q(revenue)} sub={PERIODS.find((p) => p.days === days).label} accent="emerald" />
+        <KpiCard label="Categorías con ventas" value={num(cats.length)} accent="sky" />
+        <KpiCard label="Productos con ventas" value={num(prods.length)} accent="amber" />
       </div>
 
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-100">Tendencia de ventas estimadas</h2>
-          <div className="flex gap-2 text-sm">
-            <button onClick={() => setMetric('units')} className={metric === 'units' ? 'text-brand-500 font-semibold' : 'text-slate-400'}>Unidades</button>
-            <span className="text-slate-300">·</span>
-            <button onClick={() => setMetric('revenue')} className={metric === 'revenue' ? 'text-brand-500 font-semibold' : 'text-slate-400'}>Ingreso</button>
+      {/* Controles de vista + métrica */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented options={VIEWS} value={view} onChange={setView} />
+        <Segmented
+          options={[{ key: 'units', label: 'Unidades' }, { key: 'revenue', label: 'Ingreso' }]}
+          value={metric}
+          onChange={setMetric}
+        />
+      </div>
+
+      {/* Vista: EN EL TIEMPO */}
+      {view === 'tiempo' && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100">
+              Ventas por {GRANS.find((g) => g.key === gran).label.toLowerCase()}
+            </h2>
+            <Segmented options={GRANS} value={gran} onChange={setGran} />
+          </div>
+          {serie.length ? (
+            <SalesTrend data={serie} metric={metric} xKey="label" height={300} />
+          ) : (
+            <div className="h-[300px] grid place-items-center text-sm text-slate-400">Sin ventas en este periodo.</div>
+          )}
+        </div>
+      )}
+
+      {/* Vista: POR CATEGORÍA */}
+      {view === 'categoria' && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="card p-5">
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Ventas por categoría</h2>
+            {cats.length ? (
+              <MagnitudeBars data={cats.slice(0, 12)} dataKey={metric} valueFmt={metricFmtC} height={Math.max(240, cats.slice(0, 12).length * 30)} />
+            ) : (
+              <div className="h-[240px] grid place-items-center text-sm text-slate-400">Sin datos.</div>
+            )}
+          </div>
+          <div className="card overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">Detalle por categoría</h2>
+            </div>
+            <TablaSimple
+              rows={cats}
+              cols={[
+                { h: 'Categoría', get: (r) => r.name, cls: 'font-medium text-slate-800 dark:text-slate-100' },
+                { h: 'Unidades', get: (r) => num(r.units), right: true },
+                { h: 'Ingreso est.', get: (r) => Q(r.revenue), right: true },
+              ]}
+            />
           </div>
         </div>
-        <SalesTrend data={byDay} metric={metric} />
-      </div>
+      )}
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Top 10 por unidades vendidas</h2>
-          <MagnitudeBars data={topUnits} valueFmt={num} height={340} />
+      {/* Vista: POR PRODUCTO */}
+      {view === 'producto' && (
+        <div className="space-y-4">
+          <div className="card p-5">
+            <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Top 15 productos</h2>
+            {prods.length ? (
+              <MagnitudeBars data={prods.slice(0, 15)} dataKey={metric} valueFmt={metricFmtC} height={Math.max(240, prods.slice(0, 15).length * 26)} />
+            ) : (
+              <div className="h-[240px] grid place-items-center text-sm text-slate-400">Sin datos.</div>
+            )}
+          </div>
+          <div className="card overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">Detalle por producto</h2>
+            </div>
+            <TablaSimple
+              rows={prods.slice(0, 100)}
+              cols={[
+                { h: 'Producto', get: (r) => <Link to={`/producto/${r.id}`} className="font-medium text-slate-800 dark:text-slate-100 hover:text-brand-500 block truncate max-w-[420px]">{r.name}</Link> },
+                { h: 'SKU', get: (r) => r.sku || '—', cls: 'text-slate-400 text-xs' },
+                { h: 'Unidades', get: (r) => num(r.units), right: true },
+                { h: 'Ingreso est.', get: (r) => Q(r.revenue), right: true },
+              ]}
+            />
+          </div>
         </div>
-        <div className="card p-5">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Top 10 por ingreso estimado</h2>
-          <MagnitudeBars data={topRev} valueFmt={Qcompact} height={340} />
-        </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Tabla de productos con ventas */}
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-100">Detalle por producto</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Producto</th>
-                <th className="px-4 py-3 text-left font-semibold">SKU</th>
-                <th className="px-4 py-3 text-right font-semibold">Unidades</th>
-                <th className="px-4 py-3 text-right font-semibold">Ingreso est.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {sales.byProduct.slice(0, 50).map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="px-4 py-2.5">
-                    <Link to={`/producto/${p.id}`} className="font-medium text-slate-800 dark:text-slate-100 hover:text-brand-500 truncate block max-w-[420px]">{p.name}</Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-400 text-xs tabular-nums">{p.sku || '—'}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{num(p.units)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{Q(p.revenue)}</td>
-                </tr>
+function TablaSimple({ rows, cols }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i} className={`px-4 py-3 font-semibold ${c.right ? 'text-right' : 'text-left'}`}>{c.h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              {cols.map((c, j) => (
+                <td key={j} className={`px-4 py-2.5 ${c.right ? 'text-right tabular-nums' : ''} ${c.cls || ''}`}>
+                  {c.get(r)}
+                </td>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
