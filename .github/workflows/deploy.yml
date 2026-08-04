@@ -2,8 +2,9 @@ name: Scrape & Deploy
 
 on:
   schedule:
-    # Cada 1 horas (UTC). Ajusta el intervalo aquí si lo necesitas.
-    - cron: '5 */3 * * *'
+    # Cada hora, al minuto :23 (evito el minuto :00, que es cuando GitHub está
+    # más congestionado y descarta más corridas programadas). Ajusta aquí si lo necesitas.
+    - cron: '23 * * * *'
   workflow_dispatch: {} # permite correrlo manualmente desde la pestaña Actions
   push:
     branches: [main]
@@ -30,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
@@ -48,9 +49,25 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config pull.rebase true
           git add public/data
-          git commit -m "data: captura $(date -u +%FT%TZ)" || echo "sin cambios"
-          git push
+          if git diff --cached --quiet; then
+            echo "sin cambios en datos"
+            exit 0
+          fi
+          git commit -m "data: captura $(date -u +%FT%TZ)"
+          # Push robusto: si el remoto avanzó (otra corrida o edición manual),
+          # traemos con rebase y reintentamos hasta 5 veces.
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push; then
+              echo "push OK (intento $i)"
+              exit 0
+            fi
+            echo "push falló, reintentando ($i)..."
+            sleep 5
+          done
+          echo "no se pudo hacer push tras 5 intentos" >&2
+          exit 1
 
       - run: npm run build
 
