@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSales } from '../lib/useData';
 import { KpiCard, Loading, EmptyState, Banner } from '../components/ui';
 import { SalesTrend, MagnitudeBars } from '../components/charts';
 import {
   ventaEvents, seriesByDay, seriesByWeek, seriesByMonth, aggByCategory, aggByProduct,
+  ventaEventsOnDay, daysWithSales,
 } from '../lib/metrics';
 import { Q, Qcompact, num, fecha } from '../lib/format';
 
@@ -61,6 +62,21 @@ export default function Ventas() {
   }, [events, gran]);
   const cats = useMemo(() => aggByCategory(events).sort((a, b) => b[metric] - a[metric]), [events, metric]);
   const prods = useMemo(() => aggByProduct(events).sort((a, b) => b[metric] - a[metric]), [events, metric]);
+
+  // Día específico
+  const allDays = useMemo(() => (sales ? daysWithSales(sales.events) : []), [sales]);
+  const [selectedDay, setSelectedDay] = useState('');
+  useEffect(() => {
+    if (!selectedDay && allDays.length) setSelectedDay(allDays[0]);
+  }, [allDays, selectedDay]);
+  const dayEvents = useMemo(
+    () => (sales && selectedDay ? ventaEventsOnDay(sales.events, selectedDay) : []),
+    [sales, selectedDay]
+  );
+  const dayProds = useMemo(
+    () => aggByProduct(dayEvents).sort((a, b) => b[metric] - a[metric]),
+    [dayEvents, metric]
+  );
 
   if (loading) return <Loading label="Cargando ventas…" />;
   if (error || !sales) return <EmptyState title="Sin datos de ventas">Corre el scraper para empezar.</EmptyState>;
@@ -121,19 +137,39 @@ export default function Ventas() {
 
       {/* Vista: EN EL TIEMPO */}
       {view === 'tiempo' && (
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-800 dark:text-slate-100">
-              Ventas por {GRANS.find((g) => g.key === gran).label.toLowerCase()}
-            </h2>
-            <Segmented options={GRANS} value={gran} onChange={setGran} />
+        <>
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold text-slate-800 dark:text-slate-100">
+                Ventas por {GRANS.find((g) => g.key === gran).label.toLowerCase()}
+              </h2>
+              <Segmented options={GRANS} value={gran} onChange={setGran} />
+            </div>
+            {gran === 'day' && (
+              <p className="text-xs text-slate-400 mb-3">Haz clic en un día de la gráfica para ver su detalle abajo ↓</p>
+            )}
+            {serie.length ? (
+              <SalesTrend
+                data={serie}
+                metric={metric}
+                xKey="label"
+                height={300}
+                onPointClick={gran === 'day' ? setSelectedDay : undefined}
+              />
+            ) : (
+              <div className="h-[300px] grid place-items-center text-sm text-slate-400">Sin ventas en este periodo.</div>
+            )}
           </div>
-          {serie.length ? (
-            <SalesTrend data={serie} metric={metric} xKey="label" height={300} />
-          ) : (
-            <div className="h-[300px] grid place-items-center text-sm text-slate-400">Sin ventas en este periodo.</div>
-          )}
-        </div>
+
+          <DiaEspecifico
+            day={selectedDay}
+            onDayChange={setSelectedDay}
+            min={sales.firstCapture?.slice(0, 10)}
+            max={sales.lastCapture?.slice(0, 10)}
+            events={dayEvents}
+            products={dayProds}
+          />
+        </>
       )}
 
       {/* Vista: POR CATEGORÍA */}
@@ -188,6 +224,70 @@ export default function Ventas() {
               ]}
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Panel de un día específico: total del día + productos vendidos ese día.
+function DiaEspecifico({ day, onDayChange, min, max, events, products }) {
+  const units = events.reduce((s, e) => s + e.units, 0);
+  const revenue = events.reduce((s, e) => s + e.revenue, 0);
+  const fechaLarga = day
+    ? new Date(day + 'T12:00:00').toLocaleDateString('es-GT', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      })
+    : '—';
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="p-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
+        <div>
+          <h2 className="font-semibold text-slate-800 dark:text-slate-100">Ventas de un día específico</h2>
+          <p className="text-xs text-slate-400 capitalize">{fechaLarga}</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-slate-400">Fecha:</span>
+          <input
+            type="date"
+            value={day || ''}
+            min={min}
+            max={max}
+            onChange={(e) => onDayChange(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm outline-none focus:ring-2 ring-brand-400"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800 border-b border-slate-100 dark:border-slate-800">
+        <div className="p-4 text-center">
+          <div className="text-xs text-slate-400">Unidades</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{num(units)}</div>
+        </div>
+        <div className="p-4 text-center">
+          <div className="text-xs text-slate-400">Ingreso estimado</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{Q(revenue)}</div>
+        </div>
+        <div className="p-4 text-center">
+          <div className="text-xs text-slate-400">Productos</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{num(products.length)}</div>
+        </div>
+      </div>
+
+      {products.length ? (
+        <TablaSimple
+          rows={products}
+          cols={[
+            { h: 'Producto', get: (r) => <Link to={`/producto/${r.id}`} className="font-medium text-slate-800 dark:text-slate-100 hover:text-brand-500 block truncate max-w-[420px]">{r.name}</Link> },
+            { h: 'SKU', get: (r) => r.sku || '—', cls: 'text-slate-400 text-xs' },
+            { h: 'Unidades', get: (r) => num(r.units), right: true },
+            { h: 'Ingreso est.', get: (r) => Q(r.revenue), right: true },
+          ]}
+        />
+      ) : (
+        <div className="p-8 text-center text-sm text-slate-400">
+          Sin ventas registradas este día{min && day < min ? ' (antes de iniciar el monitoreo)' : ''}.
         </div>
       )}
     </div>

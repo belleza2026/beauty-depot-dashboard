@@ -150,6 +150,18 @@ export function aggByCategory(events) {
   return [...m.values()];
 }
 
+// Eventos de venta de un día específico (dayISO = 'YYYY-MM-DD').
+export function ventaEventsOnDay(events, dayISO) {
+  return (events || []).filter((e) => e.type === 'venta' && e.at.slice(0, 10) === dayISO);
+}
+
+// Lista de días (desc) que tienen al menos una venta.
+export function daysWithSales(events) {
+  const s = new Set();
+  for (const e of events || []) if (e.type === 'venta') s.add(e.at.slice(0, 10));
+  return [...s].sort((a, b) => b.localeCompare(a));
+}
+
 // Agrega eventos por producto.
 export function aggByProduct(events) {
   const m = new Map();

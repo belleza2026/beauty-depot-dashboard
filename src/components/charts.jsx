@@ -45,12 +45,23 @@ function ChartTooltip({ active, payload, label, valueFmt }) {
   );
 }
 
-export function SalesTrend({ data, metric = 'units', xKey = 'day', height = 260 }) {
+export function SalesTrend({ data, metric = 'units', xKey = 'day', height = 260, onPointClick }) {
   const grid = isDark() ? PALETTE.gridDark : PALETTE.grid;
   const fmt = metric === 'revenue' ? Q : num;
+  const handleClick = (state) => {
+    if (onPointClick && state && state.activeLabel != null) {
+      const row = data.find((d) => d[xKey] === state.activeLabel);
+      onPointClick(row?.key ?? state.activeLabel);
+    }
+  };
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+      <AreaChart
+        data={data}
+        margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+        onClick={handleClick}
+        style={onPointClick ? { cursor: 'pointer' } : undefined}
+      >
         <defs>
           <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={PALETTE.blue} stopOpacity={0.35} />
