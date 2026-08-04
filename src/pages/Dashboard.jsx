@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useProducts, useSales } from '../lib/useData';
 import { KpiCard, Loading, EmptyState, Banner } from '../components/ui';
 import { SalesTrend, MagnitudeBars, DistributionBars } from '../components/charts';
-import { catalogMetrics, byCategory, priceDistribution, lastNDays } from '../lib/metrics';
+import { catalogMetrics, byCategory, priceDistribution, ventaEvents, seriesByDay } from '../lib/metrics';
 import { Q, Qcompact, num } from '../lib/format';
 
 export default function Dashboard() {
@@ -22,9 +22,11 @@ export default function Dashboard() {
       </EmptyState>
     );
 
-  const sales30 = sales?.hasSales ? lastNDays(sales.byDay, 30) : [];
-  const units30 = sales30.reduce((s, d) => s + d.units, 0);
-  const rev30 = sales30.reduce((s, d) => s + d.revenue, 0);
+  // Todo en hora de Guatemala, calculado desde los eventos (consistente con Ventas).
+  const ev30 = sales?.hasSales ? ventaEvents(sales.events, 30) : [];
+  const daySerie = sales?.hasSales ? seriesByDay(ventaEvents(sales.events, null)) : [];
+  const units30 = ev30.reduce((s, e) => s + e.units, 0);
+  const rev30 = ev30.reduce((s, e) => s + e.revenue, 0);
   const topProducts = sales?.byProduct?.slice(0, 8).map((p) => ({ name: p.name, value: p.units })) || [];
 
   return (
@@ -59,7 +61,7 @@ export default function Dashboard() {
           </div>
           <p className="text-xs text-slate-400 mb-3">Estimadas por cambios de inventario entre capturas</p>
           {sales?.hasSales ? (
-            <SalesTrend data={sales.byDay} metric="units" />
+            <SalesTrend data={daySerie} metric="units" xKey="label" />
           ) : (
             <div className="h-[260px] grid place-items-center text-center text-sm text-slate-400 px-6">
               Las ventas aparecerán cuando haya ≥2 capturas. Corre <code className="mx-1 text-brand-500">npm run scrape</code> periódicamente (o <code className="mx-1">npm run seed-demo</code> para ver una demostración).
