@@ -2,7 +2,7 @@ name: Scrape & Deploy
 
 on:
   schedule:
-    # Cada 3 horas (UTC). Ajusta el intervalo aquí si lo necesitas.
+    # Cada 1 horas (UTC). Ajusta el intervalo aquí si lo necesitas.
     - cron: '5 */3 * * *'
   workflow_dispatch: {} # permite correrlo manualmente desde la pestaña Actions
   push:
