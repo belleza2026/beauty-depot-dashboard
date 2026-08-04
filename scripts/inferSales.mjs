@@ -46,7 +46,15 @@ const indexById = (products) => {
   for (const p of products) m.set(p.id, p);
   return m;
 };
-const dayOf = (iso) => iso.slice(0, 10);
+// Día (YYYY-MM-DD) en hora de Guatemala (UTC-6), para que los días correspondan
+// al día real del negocio y no al UTC.
+const gtFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Guatemala',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const dayOf = (iso) => gtFmt.format(new Date(iso));
 
 export async function runInference() {
   const snaps = await loadSnapshots();

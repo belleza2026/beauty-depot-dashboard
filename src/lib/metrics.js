@@ -26,11 +26,23 @@ export function catalogMetrics(products) {
   return { total: products.length, inStock, out, low, onSale, units, value, unknownStock };
 }
 
-// Conteo de productos por categoría (top N), medida única.
+// Fecha (YYYY-MM-DD) en hora de Guatemala (UTC-6, sin horario de verano),
+// para que los días/semanas/meses correspondan al día real del negocio.
+const gtFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Guatemala',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+export const localDay = (iso) => gtFmt.format(new Date(iso));
+
+// Conteo de productos por categoría (top N). Cada producto cuenta una vez, en su
+// categoría principal, para que la suma cuadre con el total de productos.
 export function byCategory(products, topN = 10) {
   const m = new Map();
   for (const p of products) {
-    for (const c of p.categories) m.set(c, (m.get(c) || 0) + 1);
+    const c = p.categories?.[0] || 'Sin categoría';
+    m.set(c, (m.get(c) || 0) + 1);
   }
   return [...m.entries()]
     .map(([name, value]) => ({ name, value }))
@@ -54,13 +66,14 @@ export function priceDistribution(products) {
   }));
 }
 
-// Valor de inventario por categoría (stock × precio).
+// Valor de inventario por categoría (stock × precio). Categoría principal para cuadrar.
 export function valueByCategory(products, topN = 10) {
   const m = new Map();
   for (const p of products) {
     if (typeof p.stock !== 'number') continue;
     const v = (p.price || 0) * p.stock;
-    for (const c of p.categories) m.set(c, (m.get(c) || 0) + v);
+    const c = p.categories?.[0] || 'Sin categoría';
+    m.set(c, (m.get(c) || 0) + v);
   }
   return [...m.entries()]
     .map(([name, value]) => ({ name, value: Math.round(value) }))
@@ -93,11 +106,11 @@ export function ventaEvents(events, days) {
   return (events || []).filter((e) => e.type === 'venta' && (!cut || e.at >= cut));
 }
 
-// Serie temporal por día a partir de eventos filtrados.
+// Serie temporal por día (hora de Guatemala) a partir de eventos filtrados.
 export function seriesByDay(events) {
   const m = new Map();
   for (const e of events) {
-    const k = e.at.slice(0, 10);
+    const k = localDay(e.at);
     const r = m.get(k) || { key: k, label: k, units: 0, revenue: 0 };
     r.units += e.units;
     r.revenue += e.revenue;
@@ -106,13 +119,15 @@ export function seriesByDay(events) {
   return [...m.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
-// Serie por semana ISO (agrupada por lunes).
+// Serie por semana (agrupada por lunes, en hora de Guatemala).
 export function seriesByWeek(events) {
   const m = new Map();
   for (const e of events) {
-    const d = new Date(e.at);
-    const day = (d.getUTCDay() + 6) % 7; // 0 = lunes
-    d.setUTCDate(d.getUTCDate() - day);
+    // día local -> lunes de esa semana
+    const [y, mo, da] = localDay(e.at).split('-').map(Number);
+    const d = new Date(Date.UTC(y, mo - 1, da));
+    const dow = (d.getUTCDay() + 6) % 7; // 0 = lunes
+    d.setUTCDate(d.getUTCDate() - dow);
     const k = d.toISOString().slice(0, 10);
     const r = m.get(k) || { key: k, label: `Sem ${k.slice(5)}`, units: 0, revenue: 0 };
     r.units += e.units;
@@ -126,7 +141,7 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 export function seriesByMonth(events) {
   const m = new Map();
   for (const e of events) {
-    const k = e.at.slice(0, 7);
+    const k = localDay(e.at).slice(0, 7);
     const label = `${MESES[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`;
     const r = m.get(k) || { key: k, label, units: 0, revenue: 0 };
     r.units += e.units;
@@ -150,15 +165,15 @@ export function aggByCategory(events) {
   return [...m.values()];
 }
 
-// Eventos de venta de un día específico (dayISO = 'YYYY-MM-DD').
+// Eventos de venta de un día específico (dayISO = 'YYYY-MM-DD', hora de Guatemala).
 export function ventaEventsOnDay(events, dayISO) {
-  return (events || []).filter((e) => e.type === 'venta' && e.at.slice(0, 10) === dayISO);
+  return (events || []).filter((e) => e.type === 'venta' && localDay(e.at) === dayISO);
 }
 
-// Lista de días (desc) que tienen al menos una venta.
+// Lista de días (desc, hora de Guatemala) que tienen al menos una venta.
 export function daysWithSales(events) {
   const s = new Set();
-  for (const e of events || []) if (e.type === 'venta') s.add(e.at.slice(0, 10));
+  for (const e of events || []) if (e.type === 'venta') s.add(localDay(e.at));
   return [...s].sort((a, b) => b.localeCompare(a));
 }
 

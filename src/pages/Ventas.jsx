@@ -5,7 +5,7 @@ import { KpiCard, Loading, EmptyState, Banner } from '../components/ui';
 import { SalesTrend, SalesBars, MagnitudeBars } from '../components/charts';
 import {
   ventaEvents, seriesByDay, seriesByWeek, seriesByMonth, aggByCategory, aggByProduct,
-  ventaEventsOnDay, daysWithSales,
+  ventaEventsOnDay, daysWithSales, localDay,
 } from '../lib/metrics';
 import { Q, Qcompact, num, fecha } from '../lib/format';
 
@@ -162,8 +162,8 @@ export default function Ventas() {
           <DiaEspecifico
             day={selectedDay}
             onDayChange={setSelectedDay}
-            min={sales.firstCapture?.slice(0, 10)}
-            max={sales.lastCapture?.slice(0, 10)}
+            min={sales.firstCapture ? localDay(sales.firstCapture) : undefined}
+            max={sales.lastCapture ? localDay(sales.lastCapture) : undefined}
             events={dayEvents}
             products={dayProds}
           />
