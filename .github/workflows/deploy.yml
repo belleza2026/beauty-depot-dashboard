@@ -1,11 +1,9 @@
 name: Scrape & Deploy
 
 on:
-  schedule:
-    # Cada hora, al minuto :23 (evito el minuto :00, que es cuando GitHub está
-    # más congestionado y descarta más corridas programadas). Ajusta aquí si lo necesitas.
-    - cron: '23 * * * *'
-  workflow_dispatch: {} # permite correrlo manualmente desde la pestaña Actions
+  # La programación horaria la maneja un disparador externo confiable (cron-job.org)
+  # vía workflow_dispatch. El schedule nativo de GitHub se quitó por poco confiable.
+  workflow_dispatch: {} # disparado por cron-job.org cada hora (y manual desde Actions)
   push:
     branches: [main]
     paths-ignore:
@@ -16,9 +14,10 @@ permissions:
   pages: write
   id-token: write
 
+# Una corrida nueva cancela la anterior: nunca se encolan ni chocan los deploys de Pages.
 concurrency:
   group: scrape-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-deploy:
@@ -77,3 +76,5 @@ jobs:
           path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1200000 # 20 min de margen para el deploy de Pages
